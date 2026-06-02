@@ -68,3 +68,7 @@ v0.1.0. Portable round-trip + model + graceful-failure are tested on macOS/Linux
 needs the ADInstruments runtime). If your VM's `adi-reader` exposes channel/
 comment attributes differently, `src/adicht/backends/dll.py` is the only file to
 adjust — the neutral model and the portable bridge stay fixed.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
