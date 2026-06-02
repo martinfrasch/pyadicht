@@ -30,9 +30,18 @@ __version__ = "0.1.0"
 __all__ = ["read", "to_npz", "from_npz", "Recording", "Record", "Channel", "Comment"]
 
 
-def read(path: str | Path, backend: str | None = None) -> Recording:
+def read(path: str | Path, backend: str | None = None, **kw) -> Recording:
     """Read a recording. Backend auto-selected by extension unless given:
-    .npz → portable; otherwise → dll (the ADInstruments reader)."""
+    .npz → portable; otherwise → dll (the ADInstruments reader).
+
+    Extra kwargs are forwarded to the backend. The dll backend accepts
+    `channels=[2]`, `records=[1]`, `window_s=1800` to read a subset (keeps the
+    export small / bounds VM memory); the portable backend ignores them.
+    """
     if backend is None:
         backend = "portable" if str(path).lower().endswith(".npz") else "dll"
-    return get_backend(backend).read(path)
+    b = get_backend(backend)
+    try:
+        return b.read(path, **kw)
+    except TypeError:
+        return b.read(path)            # backend doesn't take the kwargs

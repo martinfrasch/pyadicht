@@ -31,27 +31,53 @@ class DllBackend:
             ) from exc
         return adi
 
-    def read(self, path: str | Path) -> Recording:
+    def read(self, path: str | Path, channels: list[int] | None = None,
+             records: list[int] | None = None, window_s: float | None = None,
+             retries: int = 5) -> Recording:
+        """Read a .adicht into the neutral model.
+
+        channels : 1-based channel indices to keep (None = all). Selecting just
+                   the channel you need keeps the export small and bounds VM RAM
+                   (full multi-channel reads of long files are GB-scale).
+        records  : 1-based record indices to keep (None = all).
+        window_s : keep only the first `window_s` seconds of each channel
+                   (None = full). Use to export just the basal window.
+        retries  : the SDK throws transient open errors on a network share;
+                   retry with backoff.
+        """
+        import time
         adi = self._require_adi()
         path = Path(path)
-        f = adi.read_file(str(path))
-        records: list[Record] = []
-        # adi-reader exposes 1-based channels; n_records per file; per-record
-        # sampling and data. We normalize into the neutral model.
+        last = None
+        for i in range(max(1, retries)):
+            try:
+                f = adi.read_file(str(path))
+                break
+            except Exception as e:               # transient share/open error
+                last = e; time.sleep(2)
+        else:
+            raise RuntimeError(f"could not open {path} after {retries} tries: {last}")
+        out_records: list[Record] = []
         n_records = f.n_records
-        for r in range(1, n_records + 1):
-            channels: list[Channel] = []
-            for ch in f.channels:
-                # ch.fs is a per-record list (samples/s); data is 1-based by record
+        rec_idx = records or list(range(1, n_records + 1))
+        for r in rec_idx:
+            chans: list[Channel] = []
+            for ci, ch in enumerate(f.channels, start=1):
+                if channels and ci not in channels:
+                    continue
                 try:
                     fs = float(ch.fs[r - 1])
-                    data = np.asarray(ch.get_data(r), dtype=np.float64)
+                    if window_s is not None:
+                        stop = max(1, int(window_s * fs))
+                        data = np.asarray(ch.get_data(r, start_sample=1,
+                                                      stop_sample=stop), dtype=np.float64)
+                    else:
+                        data = np.asarray(ch.get_data(r), dtype=np.float64)
                 except Exception:
-                    # channel not present in this record
-                    continue
-                channels.append(Channel(name=str(ch.name), units=str(ch.units[r - 1])
-                                        if hasattr(ch, "units") else "",
-                                        fs_hz=fs, data=data))
+                    continue                     # channel absent in this record
+                chans.append(Channel(name=str(ch.name), units=str(ch.units[r - 1])
+                                     if hasattr(ch, "units") else "",
+                                     fs_hz=fs, data=data))
             comments: list[Comment] = []
             for rec_obj in (f.records[r - 1],) if hasattr(f, "records") else ():
                 for cm in getattr(rec_obj, "comments", []) or []:
@@ -62,6 +88,10 @@ class DllBackend:
                         tick_pos=int(getattr(cm, "tick_position", 0)),
                         time_s=float(getattr(cm, "time", 0.0)),
                     ))
-            records.append(Record(channels=channels, comments=comments))
-        return Recording(records=records, source_path=str(path), backend=self.name,
-                         meta={"n_records": n_records})
+            out_records.append(Record(channels=chans, comments=comments))
+        return Recording(records=out_records, source_path=str(path),
+                         backend=self.name,
+                         meta={"n_records": n_records,
+                               "selected_channels": channels,
+                               "selected_records": records,
+                               "window_s": window_s})

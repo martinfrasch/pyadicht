@@ -29,14 +29,24 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="adicht", description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
+    def _read_opts(p):
+        p.add_argument("--channels", default=None,
+                       help="1-based channel indices to keep, comma-sep (e.g. 2)")
+        p.add_argument("--records", default=None,
+                       help="1-based record indices to keep, comma-sep (e.g. 1)")
+        p.add_argument("--window-min", type=float, default=None,
+                       help="keep only the first N minutes of each channel")
+
     pe = sub.add_parser("export", help="read one .adicht (DLL backend) → .npz")
     pe.add_argument("input")
     pe.add_argument("--to", required=True)
     pe.add_argument("--backend", default=None)
+    _read_opts(pe)
 
     pd = sub.add_parser("export-dir", help="batch-export every .adicht in a folder")
     pd.add_argument("indir")
     pd.add_argument("--to", required=True)
+    _read_opts(pd)
 
     pi = sub.add_parser("info", help="summarize a recording (.adicht or .npz)")
     pi.add_argument("input")
@@ -44,8 +54,18 @@ def main(argv=None) -> int:
 
     args = ap.parse_args(argv)
 
+    def _read_kwargs(a):
+        kw = {}
+        if getattr(a, "channels", None):
+            kw["channels"] = [int(x) for x in a.channels.split(",")]
+        if getattr(a, "records", None):
+            kw["records"] = [int(x) for x in a.records.split(",")]
+        if getattr(a, "window_min", None) is not None:
+            kw["window_s"] = a.window_min * 60.0
+        return kw
+
     if args.cmd == "export":
-        rec = read(args.input, backend=args.backend)
+        rec = read(args.input, backend=args.backend, **_read_kwargs(args))
         out = to_npz(rec, args.to)
         print(f"wrote {out}"); return 0
     if args.cmd == "export-dir":
@@ -53,8 +73,9 @@ def main(argv=None) -> int:
         files = sorted(Path(args.indir).glob("*.adicht"))
         if not files:
             print(f"no .adicht files in {args.indir}"); return 1
+        kw = _read_kwargs(args)
         for f in files:
-            rec = read(f, backend="dll")
+            rec = read(f, backend="dll", **kw)
             out = to_npz(rec, outdir / (f.stem + ".npz"))
             print(f"{f.name} → {out}")
         return 0

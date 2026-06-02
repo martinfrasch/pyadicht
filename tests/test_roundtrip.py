@@ -65,3 +65,12 @@ def test_dll_backend_fails_gracefully_without_windows():
 def test_unknown_backend():
     with pytest.raises(ValueError, match="unknown backend"):
         get_backend("bogus")
+
+
+def test_read_kwargs_ignored_by_portable_backend(tmp_path):
+    """read() forwards channels/window_s to the dll backend; the portable backend
+    doesn't take them and must not error (the __init__ fallback handles it)."""
+    import adicht
+    p = adicht.to_npz(_sample_recording(), tmp_path / "k.npz")
+    rec = adicht.read(p, channels=[2], window_s=1800)   # portable: kwargs ignored
+    assert rec.n_records == 1
