@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyadicht"
+version = "0.1.0"
+description = "Cross-platform reader for ADInstruments LabChart (.adicht) files via a portable .npz bridge"
+requires-python = ">=3.9"
+dependencies = ["numpy>=1.21"]
+
+[project.optional-dependencies]
+# The DLL backend only installs/works on Windows (e.g. a UTM VM).
+dll = ["adi-reader>=0.1.15"]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+adicht = "adicht.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

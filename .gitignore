@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.coverage
+.venv/
+venv/
+.DS_Store
+
+# Data — recordings and exports stay local (large / not ours to redistribute)
+*.adicht
+*.npz
+exported_npz/
